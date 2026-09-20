@@ -21,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Optional;
 
-@Mixin(Window.class)
+@Mixin(value = Window.class, priority = 0)
 abstract class WindowMixin implements FullscreenManager {
     private static @Shadow @Final Logger LOGGER;
 

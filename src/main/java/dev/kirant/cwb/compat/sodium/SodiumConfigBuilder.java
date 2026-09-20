@@ -29,10 +29,36 @@ public final class SodiumConfigBuilder implements ConfigEntryPoint {
             .setElementNameProvider(x -> Components.translatable(x.getTranslationKey()))
             .setBinding(FullscreenManager.getInstance()::setFullscreenMode, FullscreenManager.getInstance()::getFullscreenMode);
 
-        builder.registerOwnModOptions()
-            .registerOptionReplacement(Identifier.parse("sodium:general.fullscreen"), fullscreenOption)
-            .registerOptionReplacement(Identifier.parse("sodium:general.fullscreen_mode"), fullscreenOption)
-            .registerOptionOverlay(Identifier.parse("sodium:general.fullscreen_resolution"), builder.createIntegerOption(Identifier.parse("sodium:general.fullscreen_resolution")).setEnabledProvider(x -> true));
+        ModOptionsBuilder options = builder.registerOwnModOptions();
+        SodiumConfigBuilder.registerOptionReplacement(options, "sodium:general.fullscreen", fullscreenOption);
+        SodiumConfigBuilder.registerOptionReplacement(options, "sodium:general.fullscreen_mode", fullscreenOption);
+        SodiumConfigBuilder.registerOptionOverlay(options, "sodium:general.fullscreen_resolution", builder.createIntegerOption(Identifier.parse("sodium:general.fullscreen_resolution")).setEnabledProvider(x -> true));
+    }
+
+    private static void registerOptionReplacement(ModOptionsBuilder builder, String id, OptionBuilder option) {
+        //? if sodium: >=0.8.13 <0.9.0 || >=0.9.2 {
+        try {
+            builder.registerOptionReplacement(Identifier.parse(id), option, Integer.MAX_VALUE);
+            return;
+        } catch (Throwable _) {
+            // Ignore `MethodNotFoundException` if the player has an older version of Sodium installed.
+        }
+        //?}
+
+        builder.registerOptionReplacement(Identifier.parse(id), option);
+    }
+
+    private static void registerOptionOverlay(ModOptionsBuilder builder, String id, OptionBuilder option) {
+        //? if sodium: >=0.8.13 <0.9.0 || >=0.9.2 {
+        try {
+            builder.registerOptionOverlay(Identifier.parse(id), option, Integer.MAX_VALUE);
+            return;
+        } catch (Throwable _) {
+            // Ignore `MethodNotFoundException` if the player has an older version of Sodium installed.
+        }
+        //?}
+
+        builder.registerOptionOverlay(Identifier.parse(id), option);
     }
 }
 //?}
