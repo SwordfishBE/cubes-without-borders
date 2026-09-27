@@ -7,7 +7,7 @@ public interface FullscreenType {
 
     boolean isSupported();
 
-    void enable(Window window, Monitor monitor, VideoMode videoMode);
+    boolean enable(Window window, Monitor monitor, VideoMode videoMode);
 
     void disable(Window window);
 }

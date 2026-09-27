@@ -2,7 +2,8 @@ package dev.kirant.cwb;
 
 import com.mojang.blaze3d.platform.*;
 import dev.kirant.cwb.util.*;
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.sdl.SDLHints;
+import org.lwjgl.sdl.SDLVideo;
 
 import java.util.*;
 import java.util.stream.*;
@@ -44,16 +45,28 @@ public final class FullscreenTypes {
     }
 
     public static FullscreenType borderless() {
-        // We also target Java 8, where `orElseThrow` does not exist.
-        //noinspection OptionalGetWithoutIsPresent
         return FullscreenTypes.stream().findFirst().get();
     }
 
-    // This fullscreen type has a special meaning that
-    // should be recognized by the rest of the codebase:
-    //
-    // It indicates that the mod should disable itself and
-    // allow Minecraft to handle things as it normally does.
+    public static boolean isWindowed(FullscreenType type) {
+        return type instanceof WindowedFullscreen || type instanceof MacOSBorderlessFullscreen;
+    }
+
+    private static boolean enableWindowed(Window window, Monitor monitor, int heightPadding) {
+        long handle = window.handle();
+        if (!SDLVideo.SDL_SetWindowFullscreen(handle, false) || !SDLVideo.SDL_SetWindowBordered(handle, false)) {
+            return false;
+        }
+
+        window.x = monitor.x();
+        window.y = monitor.y();
+        window.width = monitor.currentMode().getWidth();
+        window.height = monitor.currentMode().getHeight() + heightPadding;
+        return SDLVideo.SDL_SetWindowSize(handle, window.width, window.height)
+            && SDLVideo.SDL_SetWindowPosition(handle, window.x, window.y);
+    }
+
+    // This fullscreen type lets Minecraft handle exclusive fullscreen.
     private static class DefaultFullscreen implements FullscreenType {
         @Override
         public String getId() {
@@ -66,14 +79,12 @@ public final class FullscreenTypes {
         }
 
         @Override
-        public void enable(Window window, Monitor monitor, VideoMode videoMode) {
-            // nop
+        public boolean enable(Window window, Monitor monitor, VideoMode videoMode) {
+            return true;
         }
 
         @Override
-        public void disable(Window window) {
-            // nop
-        }
+        public void disable(Window window) { }
     }
 
     private static class WindowedFullscreen implements FullscreenType {
@@ -88,52 +99,39 @@ public final class FullscreenTypes {
         }
 
         @Override
-        public void enable(Window window, Monitor monitor, VideoMode videoMode) {
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_DECORATED, GLFW.GLFW_FALSE);
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_AUTO_ICONIFY, GLFW.GLFW_FALSE);
-
-            window.x = monitor.x();
-            window.y = monitor.y();
-            window.width = monitor.currentMode().getWidth();
-            window.height = monitor.currentMode().getHeight();
-            GLFW.glfwSetWindowMonitor(window.handle(), 0, window.x, window.y, window.width, window.height, -1);
+        public boolean enable(Window window, Monitor monitor, VideoMode videoMode) {
+            return FullscreenTypes.enableWindowed(window, monitor, 0);
         }
 
         @Override
         public void disable(Window window) {
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_DECORATED, GLFW.GLFW_TRUE);
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_AUTO_ICONIFY, GLFW.GLFW_TRUE);
+            SDLVideo.SDL_SetWindowBordered(window.handle(), true);
         }
     }
 
-    private static class HybridFullscreen extends WindowedFullscreen {
+    private static class HybridFullscreen implements FullscreenType {
         @Override
         public String getId() {
             return "minecraft:hybrid";
         }
 
-        //? if >=26.1 {
         @Override
-        public void enable(Window window, Monitor monitor, VideoMode videoMode) {
-            GLFW.glfwWindowHint(GLFW.GLFW_SOFT_FULLSCREEN, GLFW.GLFW_TRUE);
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_AUTO_ICONIFY, GLFW.GLFW_TRUE);
-
-            window.x = monitor.x();
-            window.y = monitor.y();
-            window.width = videoMode.getWidth();
-            window.height = videoMode.getHeight();
-            int refreshRate = videoMode.getRefreshRate();
-            GLFW.glfwSetWindowMonitor(window.handle(), monitor.monitor(), window.x, window.y, window.width, window.height, refreshRate);
+        public boolean isSupported() {
+            return true;
         }
 
         @Override
-        public void disable(Window window) {
-            GLFW.glfwWindowHint(GLFW.GLFW_SOFT_FULLSCREEN, GLFW.GLFW_FALSE);
+        public boolean enable(Window window, Monitor monitor, VideoMode videoMode) {
+            SDLHints.SDL_SetHint(SDLHints.SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "1");
+            return SDLVideo.SDL_SetWindowFullscreenMode(window.handle(), null)
+                && SDLVideo.SDL_SetWindowFullscreen(window.handle(), true);
         }
-        //?}
+
+        @Override
+        public void disable(Window window) { }
     }
 
-    private static class LinuxBorderlessFullscreen implements FullscreenType {
+    private static class LinuxBorderlessFullscreen extends HybridFullscreen {
         @Override
         public String getId() {
             return "linux:borderless";
@@ -145,20 +143,10 @@ public final class FullscreenTypes {
         }
 
         @Override
-        public void enable(Window window, Monitor monitor, VideoMode videoMode) {
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_AUTO_ICONIFY, GLFW.GLFW_FALSE);
-
-            window.x = monitor.x();
-            window.y = monitor.y();
-            window.width = monitor.currentMode().getWidth();
-            window.height = monitor.currentMode().getHeight();
-            int refreshRate = monitor.currentMode().getRefreshRate();
-            GLFW.glfwSetWindowMonitor(window.handle(), monitor.monitor(), window.x, window.y, window.width, window.height, refreshRate);
-        }
-
-        @Override
-        public void disable(Window window) {
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_AUTO_ICONIFY, GLFW.GLFW_TRUE);
+        public boolean enable(Window window, Monitor monitor, VideoMode videoMode) {
+            SDLHints.SDL_SetHint(SDLHints.SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
+            return SDLVideo.SDL_SetWindowFullscreenMode(window.handle(), null)
+                && SDLVideo.SDL_SetWindowFullscreen(window.handle(), true);
         }
     }
 
@@ -174,25 +162,14 @@ public final class FullscreenTypes {
         }
 
         @Override
-        public void enable(Window window, Monitor monitor, VideoMode videoMode) {
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_DECORATED, GLFW.GLFW_FALSE);
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_AUTO_ICONIFY, GLFW.GLFW_FALSE);
+        public boolean enable(Window window, Monitor monitor, VideoMode videoMode) {
+            if (!FullscreenTypes.enableWindowed(window, monitor, 0)) {
+                return false;
+            }
             MinecraftWindow.MacOS.setHasShadow(window, false);
             MinecraftWindow.MacOS.hideGlobalUI();
-
-            window.x = monitor.x();
-            window.y = monitor.y();
-            window.width = monitor.currentMode().getWidth();
-            window.height = monitor.currentMode().getHeight();
-            GLFW.glfwSetWindowMonitor(window.handle(), 0, window.x, window.y, window.width, window.height, -1);
-
-            // GLFW ignores the GLFW_RESIZABLE flag for undecorated windows because such windows are
-            // always meant to be non-resizable. However, there was a brief bug where it failed
-            // to enforce this behavior. In turn, this GLFW bug exposed a peculiar macOS issue:
-            // on macOS 10.15 (Catalina) and earlier, if the resizable bit in NSWindowStyleMask
-            // is not cleared in fullscreen mode, a window affected by this may end up being
-            // automatically minimized when the user clicks anywhere in the content area.
             MinecraftWindow.MacOS.setResizable(window, false);
+            return true;
         }
 
         @Override
@@ -200,39 +177,14 @@ public final class FullscreenTypes {
             MinecraftWindow.MacOS.registerWindowWillReturnFieldEditorStub(window);
             MinecraftWindow.MacOS.showGlobalUI();
             MinecraftWindow.MacOS.setHasShadow(window, true);
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_DECORATED, GLFW.GLFW_TRUE);
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_RESIZABLE, GLFW.GLFW_TRUE);
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_AUTO_ICONIFY, GLFW.GLFW_TRUE);
-
-            // macOS 26.3+ (Tahoe) seems to leave a re-decorated window in a weird state
-            // where it stops receiving keyboard and mouse inputs.
-            // Thankfully, manually re-focusing it via `[window makeKeyAndOrderFront:nil]` helps,
-            // which is exactly what `glfwFocusWindow` does under the hood.
-            GLFW.glfwFocusWindow(window.handle());
+            SDLVideo.SDL_SetWindowBordered(window.handle(), true);
+            SDLVideo.SDL_SetWindowResizable(window.handle(), true);
+            SDLVideo.SDL_RaiseWindow(window.handle());
         }
     }
 
-    // Windows 8 introduced a feature called DirectFlip, which detects applications running
-    // in windowed fullscreen mode and automatically switches them to exclusive fullscreen.
-    // This would be a rather useful optimization... if Microsoft had implemented it properly.
-    // Instead, it can cause noticeable flickering whenever an affected window gains or loses
-    // focus, due to changes in the compositing mode.
-    //
-    // Because of this long-standing bug, some users have sought ways to bypass the feature.
-    // Since there are no official or documented methods to opt-out of this "nicety",
-    // developers around the world have come up with a really nasty solution: extending
-    // the window by 1-2 pixels beyond the monitor's boundaries. As a result, the window's
-    // dimensions no longer match those of the display, preventing Windows from applying
-    // its DirectFlip and forcing the application to remain in windowed mode.
-    //
-    // However, don't be fooled, the problems are not gonna stop here: Windows has
-    // essentially zero respect for windowed applications and may simply choose to
-    // discard a significant portion of their frames instead of rendering them.
-    //
-    // In practice, this leaves you with a rather unpleasant choice: a performant,
-    // if somewhat flickery, experience, or a non-flickering one with random and
-    // unstable drops in the frame output.
-    private static class WindowsWindowedFullscreen implements FullscreenType {
+    // Extending a fullscreen-sized window by one pixel avoids Windows DirectFlip blinking.
+    private static class WindowsWindowedFullscreen extends WindowedFullscreen {
         @Override
         public String getId() {
             return "windows:windowed";
@@ -244,23 +196,18 @@ public final class FullscreenTypes {
         }
 
         @Override
-        public void enable(Window window, Monitor monitor, VideoMode videoMode) {
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_DECORATED, GLFW.GLFW_FALSE);
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_AUTO_ICONIFY, GLFW.GLFW_FALSE);
-
-            window.x = monitor.x();
-            window.y = monitor.y();
-            window.width = monitor.currentMode().getWidth();
-            window.height = monitor.currentMode().getHeight() + 1;
-            GLFW.glfwSetWindowMonitor(window.handle(), 0, window.x, window.y, window.width, window.height, -1);
+        public boolean enable(Window window, Monitor monitor, VideoMode videoMode) {
+            if (!FullscreenTypes.enableWindowed(window, monitor, 1)) {
+                return false;
+            }
             MinecraftWindow.Windows.pleaseStopDiscardingFuckingFramesThankYou(window);
+            return true;
         }
 
         @Override
         public void disable(Window window) {
             MinecraftWindow.Windows.restoreStyle(window);
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_DECORATED, GLFW.GLFW_TRUE);
-            GLFW.glfwSetWindowAttrib(window.handle(), GLFW.GLFW_AUTO_ICONIFY, GLFW.GLFW_TRUE);
+            super.disable(window);
         }
     }
 

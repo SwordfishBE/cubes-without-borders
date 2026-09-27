@@ -7,8 +7,8 @@ import com.sun.jna.Callback;
 import com.sun.jna.CallbackReference;
 import com.sun.jna.Pointer;
 import net.minecraft.client.Minecraft;
-import org.lwjgl.glfw.GLFWNativeCocoa;
-import org.lwjgl.glfw.GLFWNativeWin32;
+import org.lwjgl.sdl.SDLProperties;
+import org.lwjgl.sdl.SDLVideo;
 import org.lwjgl.system.*;
 import org.lwjgl.system.macosx.ObjCRuntime;
 import org.lwjgl.system.windows.User32;
@@ -101,7 +101,7 @@ public final class MinecraftWindow {
         }
 
         public static void setStyle(Window window, long style, long exStyle) {
-            long hWnd = GLFWNativeWin32.glfwGetWin32Window(window.handle());
+            long hWnd = SDLProperties.SDL_GetPointerProperty(SDLVideo.SDL_GetWindowProperties(window.handle()), SDLVideo.SDL_PROP_WINDOW_WIN32_HWND_POINTER, 0);
             long currentStyle = User32.GetWindowLongPtr(null, hWnd, User32.GWL_STYLE);
             long currentExStyle = User32.GetWindowLongPtr(null, hWnd, User32.GWL_EXSTYLE);
             WINDOW_STYLES.put(window, new AbstractMap.SimpleEntry<>(currentStyle, currentExStyle));
@@ -118,7 +118,7 @@ public final class MinecraftWindow {
                 return;
             }
 
-            long hWnd = GLFWNativeWin32.glfwGetWin32Window(window.handle());
+            long hWnd = SDLProperties.SDL_GetPointerProperty(SDLVideo.SDL_GetWindowProperties(window.handle()), SDLVideo.SDL_PROP_WINDOW_WIN32_HWND_POINTER, 0);
             User32.SetWindowLongPtr(null, hWnd, User32.GWL_STYLE, styles.getKey());
             User32.SetWindowLongPtr(null, hWnd, User32.GWL_EXSTYLE, styles.getValue());
         }
@@ -148,7 +148,7 @@ public final class MinecraftWindow {
         }
 
         public static void setHasShadow(Window window, boolean hasShadow) {
-            long nsWindowPtr = GLFWNativeCocoa.glfwGetCocoaWindow(window.handle());
+            long nsWindowPtr = SDLProperties.SDL_GetPointerProperty(SDLVideo.SDL_GetWindowProperties(window.handle()), SDLVideo.SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, 0);
             Proxy nsWindow = new Proxy(new Pointer(nsWindowPtr));
             nsWindow.send("setHasShadow:", hasShadow);
         }
@@ -156,7 +156,7 @@ public final class MinecraftWindow {
         public static void setResizable(Window window, boolean resizable) {
             final long NSWindowStyleMaskResizable = 1L << 3;
 
-            long nsWindowPtr = GLFWNativeCocoa.glfwGetCocoaWindow(window.handle());
+            long nsWindowPtr = SDLProperties.SDL_GetPointerProperty(SDLVideo.SDL_GetWindowProperties(window.handle()), SDLVideo.SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, 0);
             Proxy nsWindow = new Proxy(new Pointer(nsWindowPtr));
             long styleMask = ((Number)nsWindow.send("styleMask")).longValue();
             long newStyleMask = (styleMask & ~NSWindowStyleMaskResizable) | (resizable ? NSWindowStyleMaskResizable : 0);
@@ -179,7 +179,8 @@ public final class MinecraftWindow {
                 return false;
             }
 
-            Proxy nsWindow = new Proxy(new Pointer(GLFWNativeCocoa.glfwGetCocoaWindow(window.handle())));
+            long nsWindowPtr = SDLProperties.SDL_GetPointerProperty(SDLVideo.SDL_GetWindowProperties(window.handle()), SDLVideo.SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, 0);
+            Proxy nsWindow = new Proxy(new Pointer(nsWindowPtr));
             Proxy nsWindowDelegate = nsWindow.sendProxy("delegate");
             if (nsWindowDelegate == null || nsWindowDelegate.sendBoolean("respondsToSelector:", "windowWillReturnFieldEditor:toObject:")) {
                 return false;
